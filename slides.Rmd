@@ -1,0 +1,240 @@
+---
+title:          "Analyzing the time-frequency content of EEG data"
+author:         "Alexander Enge"
+date:           "25/05/2022"
+institute:      "Neuro Lab @ Humboldt-Universität zu Berlin"
+classoption:    "t"
+bibliography:   "template/references.bib"
+csl:            "template/apa.csl"
+output:
+  beamer_presentation:
+    includes:
+      in_header: "template/hu_template.tex"
+---
+  
+```{r, setup, include=FALSE}
+# Global chunk options
+knitr::opts_chunk$set(echo = FALSE, fig.align = "center", out.width = "90%")
+```
+
+## Evoked vs. induced activity
+
+```{python, induced, out.width="70%"}
+import numpy as np
+import matplotlib.pyplot as plt
+
+from mne.time_frequency import tfr_array_morlet
+
+
+def make_sine(times, freq, ampl, phase):
+    return ampl * np.sin(2 * np.pi * freq * times + phase * 2 * np.pi)
+
+
+def make_windowed_sine(times, freq, ampl, phase, start, stop):
+    sine = make_sine(times, freq, ampl, phase)
+    window = np.zeros_like(times)
+    window[(times >= start) & (times <= stop)] = 1.
+    return sine * window
+
+
+# Define sampling interval
+sampling_rate = 500
+tmax = 1.
+times = np.arange(0, tmax, 1. / sampling_rate)
+
+# Define Morlet wavelets
+morlet_freqs = np.arange(6, 30, step=2)
+morlet_cycles = np.arange(3, 15, step=1)
+
+# Prepare plot
+n_trials = 4
+fig, axs = plt.subplots(nrows=n_trials + 1, ncols=2, figsize=(7, 6))
+signal_sum = np.zeros_like(times)
+tfr_sum = np.zeros((len(morlet_freqs), len(times)))
+for ix, ax in zip(range(n_trials), axs):
+
+    # Create signal and plot as timecourse
+    noise = np.random.normal(0, 1, size=times.shape)
+    sine_early = make_windowed_sine(
+        times, freq=10., ampl=10., phase=0.25 * ix, start=0.2, stop=0.4)
+    sine_late = make_windowed_sine(
+        times, freq=20., ampl=10., phase=0., start=0.6, stop=0.8)
+    signal = noise + sine_early + sine_late
+    ax[0].plot(times, signal, 'r')
+    trial_label = f'Trial {ix + 1}'
+    ax[0].text(-0.02, max(signal) - 4, trial_label)
+
+    # Add to running sum for later averaging
+    signal_sum += signal
+
+    # Compute time-frequency decomposition and plot as image
+    signal = np.expand_dims(signal, axis=0)
+    signal = np.expand_dims(signal, axis=0)
+    tfr = tfr_array_morlet(signal, sampling_rate, freqs=morlet_freqs,
+                           n_cycles=morlet_cycles, output='power')
+    tfr = np.squeeze(tfr)
+    ax[1].imshow(
+      tfr, cmap='turbo', aspect='auto', vmin=-tfr.max(), vmax=tfr.max(),
+      origin='lower', extent=(0., 1., 6., 40.))
+    ax[1].text(0.02, 34., trial_label)
+
+    # Add to running sum for later averaging
+    tfr_sum += tfr
+
+# Plot averaged timecourse
+signal_avg = signal_sum / n_trials
+axs[-1, 0].plot(times, signal_avg, 'r')
+axs[-1, 0].text(-0.02, max(signal_avg) - 4, 'Average')
+
+# Plot averaged power
+tfr_avg = tfr_sum / n_trials
+_ = axs[-1, 1].imshow(
+  tfr_avg, cmap='turbo', aspect='auto', vmin=-tfr_avg.max(), vmax=tfr_avg.max(),
+  origin='lower', extent=(0., 1., 6., 40.))
+_ = axs[-1, 1].text(0.02, 34., 'Average')
+
+# Column titles
+_ = axs[0, 0].set_title('Time domain', weight='bold')
+_ = axs[0, 1].set_title('Time-frequency domain', weight='bold')
+
+# Axis lables
+_ = fig.text(0.5, 0., 'Time (s)', ha='center')
+_ = fig.text(0., 0.5, 'Amplitude (µV)', va='center', rotation='vertical')
+_ = fig.text(0.5, 0.5, 'Frequency (Hz)', va='center', rotation='vertical')
+
+# Show figure
+_ = fig.tight_layout()
+_ = plt.subplots_adjust(hspace=0.3, wspace=0.2)
+_ = plt.show()
+```
+
+## Sine waves
+
+```{python, sine}
+import matplotlib.patches as patches
+
+# Define sine wave
+freq = 2.
+ampl = 5.
+x = ampl * np.sin(2 * np.pi * freq * times)
+
+# Create empty figure
+fig, ax = plt.subplots(figsize=(9, 4))
+
+# Annotate one cycle with shading
+rect = patches.Rectangle(
+  (0, -ampl), 1. / freq, 2 * ampl, color='r', linewidth=0, alpha=.1)
+_ = plt.text(
+  0.01, 0.5 - ampl, "Cycle", ha='left', va="center", color='r', alpha=.6)
+_ = ax.add_patch(rect)
+
+# Plot sine wave
+_ = ax.plot(times, x, 'r')
+_ = ax.set_xlabel('Time (s)')
+_ = ax.set_ylabel('Amplitude (µV)')
+
+# Annotate amplitude
+_ = plt.text(0.25 * tmax / freq + 0.02, ampl / 2, "Amplitude (µV)",
+         ha="center", va="center", rotation = "vertical")
+_ = plt.text(0.25 * tmax / freq - 0.02, ampl / 2, "How strong?",
+        ha = "center", va="center", rotation = "vertical")
+_ = plt.annotate('', xy=(0.25 * tmax / freq, ampl), xytext=(0.25 * tmax / freq, 0),
+             arrowprops=dict(arrowstyle='<->'))
+
+# Annotate frequency
+_ = plt.text(0.75 * tmax / freq, -ampl / 10., "Frequency (Hz)",
+             ha = "center", va = "center")
+_ = plt.text(0.75 * tmax / freq, ampl / 12., "How fast?",
+             ha='center', va="center")
+_ = plt.annotate('', xy=(0, 0), xytext=(tmax / freq, 0),
+             arrowprops=dict(arrowstyle='<->'))
+
+# Annotate phase
+_ = plt.annotate('Where?\nPhase (°)', xy=(0, 0.5), xytext=(0, ampl - 0.5),
+             ha = "center", va='center', arrowprops=dict(arrowstyle='->'))
+```
+
+## Sine waves
+
+```{python, sines, out.width="100%"}
+# Plot new sine waves
+smaller_ampl = 2.5
+x_smaller_ampl = smaller_ampl * np.sin(2 * np.pi * freq * times)
+faster_freq = 4.
+x_faster_freq = ampl * np.sin(2 * np.pi * faster_freq * times)
+x_shift_phase = ampl * np.sin(2 * np.pi * freq * times - np.pi / 2)
+x_news = {'Amplitude 2.5 vs. 5 µV': x_smaller_ampl,
+          'Frequency 4 vs. 2 Hz': x_faster_freq,
+          'Phase shift 90 vs. 0°': x_shift_phase}
+
+# Plot together with the original sine wave
+fig, axs = plt.subplots(1, 3, figsize=(10, 2.5))
+for ax, (title, x_new) in zip(axs, x_news.items()):
+  _ = ax.plot(times, x, 'r', alpha=0.2)
+  _ = ax.plot(times, x_new, 'r')
+  _ = ax.set_title(title, weight='bold')
+
+# Axis labels
+_ = axs[1].set_xlabel('Time (s)')
+_ = axs[0].set_ylabel('Amplitude (µV)')
+
+# Show figure
+_ = fig.tight_layout()
+_ = plt.show()
+```
+
+## Fourier transform
+
+```{python, fourier}
+# Define frequencies of interest and their amplitudes
+freqs = [2., 10., 25.]
+ampls = [5., 4., 2.]
+
+# Create figure
+fig, all_axs = plt.subplots(len(freqs) + 1, 2, figsize=(9, 6), sharey='col')
+x_sum = np.zeros_like(times)
+for row_ix, (freq, ampl, axs) in enumerate(zip(freqs, ampls, all_axs)):
+
+    # Create a single sine wave
+    x = ampl * np.sin(2 * np.pi * freq * times)
+    _ = axs[0].plot(times, x, 'r')
+
+    # Annotate
+    label = f'$F = {int(freq)}$ Hz, $A = {int(ampl)}$ µV'
+    _ = axs[0].text(-0.02, 8., label)
+
+    # Compute spectrum
+    X = np.fft.fft(x)
+    n = np.arange(len(X))
+    freq = n / tmax
+    _ = axs[1].stem(freq, np.abs(X), linefmt='b', markerfmt=" ", basefmt="-b")
+    _ = axs[1].set_xlim(0, max(freqs) + 5)
+
+    # Add sine wave to the combined signal
+    x_sum += x
+
+# Plot combined signal
+_ = all_axs[-1, 0].plot(times, x_sum, 'r')
+_ = all_axs[-1, 0].text(-0.02, 8., 'Sum')
+
+# Plot spectrum of the combined signal
+X = np.fft.fft(x_sum)
+n = np.arange(len(X))
+freq = n / tmax
+_ = all_axs[-1, 1].stem(
+  freq, np.abs(X), linefmt='b', markerfmt=" ", basefmt="-b")
+_ = all_axs[-1, 1].set_xlim(0, max(freqs) + 5)
+
+# Column titles
+_ = all_axs[0, 0].set_title('Time domain', weight='bold')
+_ = all_axs[0, 1].set_title('Frequency domain', weight='bold')
+
+# Axis labels
+_ = all_axs[-1, 0].set_xlabel('Time (s)')
+_ = all_axs[-1, 1].set_xlabel('Frequency (Hz)')
+_ = fig.text(0, 0.5, 'Amplitude (µV)', va='center', rotation='vertical')
+
+# Show figure
+_ = fig.tight_layout()
+_ = plt.show()
+```
