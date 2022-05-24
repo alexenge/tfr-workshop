@@ -11,11 +11,74 @@ output:
     includes:
       in_header: "template/hu_template.tex"
 ---
-  
+
 ```{r, setup, include=FALSE}
+# Load packages
+library(here)
+
 # Global chunk options
 knitr::opts_chunk$set(echo = FALSE, fig.align = "center", out.width = "90%")
+
+# Create helper function to include figures only if the file exists
+figures_dir <- here("template", "figures")
+include_if_exists <- function(path, ...) {
+  if (file.exists(path)) knitr::include_graphics(path, ...)
+}
 ```
+
+## Today
+
+1. Why study neural oscillations?
+
+    - Evoked vs. induced activity
+
+2. Frequency analysis
+
+    - Sine waves, Fourier transform
+
+3. Time-frequency analysis
+
+    - Morlet wavelets
+
+4. Example workflow
+
+    - MNE-Python style, hu-neuro-pipeline style
+
+## Why study neural oscillations?
+
+### Empirical data
+
+\bigskip
+
+```{r}
+include_if_exists(here(figures_dir, "berger.png"))
+```
+
+::: columns
+
+:::: column
+
+### Algorithm
+
+```{r, out.width="40%"}
+include_if_exists(here(figures_dir, "circuit.pdf"))
+```
+
+::::
+
+:::: column
+
+### Computation
+
+- Working memory
+
+- Binding
+
+- Consciousness
+
+::::
+
+:::
 
 ## Evoked vs. induced activity
 
@@ -108,6 +171,12 @@ _ = plt.subplots_adjust(hspace=0.3, wspace=0.2)
 _ = plt.show()
 ```
 
+## Frequency analysis
+
+**Goal:** Examine which frequencies (oscillations) contribute to a stretch of continuous EEG
+
+**Approach:** Decompose the continuous EEG into a set of sine waves $\rightarrow$ Fourier transform
+
 ## Sine waves
 
 ```{python, sine}
@@ -182,6 +251,38 @@ _ = axs[0].set_ylabel('Amplitude (µV)')
 _ = fig.tight_layout()
 _ = plt.show()
 ```
+
+## Fourier transform
+
+::: columns
+
+:::: {.column width="30%"}
+
+```{r}
+include_if_exists(here(figures_dir, "fourier.jpg"))
+```
+
+::::
+
+:::: {.column width="70%"}
+
+**Joseph Fourier** (1768--1830):
+
+\bigskip
+
+*Any signal can be expressed as sum of weighted sine waves, each with its own frequency, amplitude, and phase*
+
+::::
+
+:::
+
+\scriptsize
+\begin{equation*}
+\begin{split}
+f(t) &= A_0 + A_1 \cos(\omega t + \varphi_1) + A_2 \cos(\omega t + \varphi_2) + ... + A_N \cos(\omega t +\varphi_N) \\
+&= \sum_{n=0}^N A_n \cos(\omega t +\varphi_n)\quad\text{where $A$ = amplitude, $\omega$ = frequency, $\varphi$ = phase}
+\end{split}
+\end{equation*}
 
 ## Fourier transform
 
