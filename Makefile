@@ -1,6 +1,7 @@
 # User-defined variables
 DOCKER_USER		:= alexenge
 IMAGE_VERSION	:= latest
+KNIT_CMD		:= Rscript -e "rmarkdown::render(input = 'slides.Rmd')"
 
 # Automatic workflow variables
 PROJECT_DIR		:= $(CURDIR)
@@ -9,14 +10,14 @@ IMAGE_TAG 		:= $(DOCKER_USER)/$(PROJECT_NAME)
 REMOTE_DIR		:= /home/rstudio/project
 SHELL			:= bash
 
-# If DOCKER=TRUE, do stuff inside the Docker container
-ifeq ($(DOCKER), TRUE)
-	run := docker run --rm --volume $(PROJECT_DIR):$(REMOTE_DIR) $(IMAGE_TAG)
-endif
-
 # Knit the slides
 all:
-	$(run) Rscript -e "rmarkdown::render(input = 'slides.Rmd')"
+	$(KNIT_CMD)
+
+# Knit the slides with Docker
+docker:
+	docker run --rm --volume $(PROJECT_DIR):$(REMOTE_DIR) $(IMAGE_TAG) \
+	$(KNIT_CMD)
 
 # Run an interactive RStudio session with Docker
 interactive:
