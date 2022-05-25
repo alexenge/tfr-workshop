@@ -17,7 +17,11 @@ output:
 library(here)
 
 # Global chunk options
-knitr::opts_chunk$set(echo = FALSE, fig.align = "center", out.width = "90%")
+knitr::opts_chunk$set(
+  echo = FALSE,
+  fig.align = "center",
+  out.width = "90%"
+)
 
 # Create helper function to include figures only if the file exists
 figures_dir <- here("template", "figures")
@@ -72,7 +76,7 @@ include_if_exists(here(figures_dir, "circuit.pdf"))
 
 - Working memory
 
-- Binding
+- Language
 
 - Consciousness
 
@@ -82,18 +86,18 @@ include_if_exists(here(figures_dir, "circuit.pdf"))
 
 ## Evoked vs. induced activity
 
-```{python, induced, out.width="70%"}
+```{python, out.width="70%", results=FALSE}
 import numpy as np
 import matplotlib.pyplot as plt
 
 from mne.time_frequency import tfr_array_morlet
 
 
-def make_sine(times, freq, ampl, phase):
+def make_sine(times, freq, ampl, phase=0.):
     return ampl * np.sin(2 * np.pi * freq * times + phase * 2 * np.pi)
 
 
-def make_windowed_sine(times, freq, ampl, phase, start, stop):
+def make_windowed_sine(times, start, stop, freq, ampl, phase=0.):
     sine = make_sine(times, freq, ampl, phase)
     window = np.zeros_like(times)
     window[(times >= start) & (times <= stop)] = 1.
@@ -101,47 +105,48 @@ def make_windowed_sine(times, freq, ampl, phase, start, stop):
 
 
 # Define sampling interval
-sampling_rate = 500
+sampling_rate = 500.
 tmax = 1.
 times = np.arange(0, tmax, 1. / sampling_rate)
 
 # Define Morlet wavelets
-morlet_freqs = np.arange(6, 30, step=2)
-morlet_cycles = np.arange(3, 15, step=1)
+morlet_freqs = np.arange(6., 30., step=2.)
+morlet_cycles = np.arange(3., 15., step=1.)
+
+# Prepare empty matrices
+signal_sum = np.zeros_like(times)
+tfr_sum = np.zeros((len(morlet_freqs), len(times)))
 
 # Prepare plot
 n_trials = 4
 fig, axs = plt.subplots(nrows=n_trials + 1, ncols=2, figsize=(7, 6))
-signal_sum = np.zeros_like(times)
-tfr_sum = np.zeros((len(morlet_freqs), len(times)))
 for ix, ax in zip(range(n_trials), axs):
 
-    # Create signal and plot as timecourse
+    # Create signal and plot as a timecourse
     noise = np.random.normal(0, 1, size=times.shape)
     sine_early = make_windowed_sine(
-        times, freq=10., ampl=10., phase=0.25 * ix, start=0.2, stop=0.4)
+        times, start=0.2, stop=0.4, freq=10., ampl=10., phase=0.25 * ix)
     sine_late = make_windowed_sine(
-        times, freq=20., ampl=10., phase=0., start=0.6, stop=0.8)
+        times, start=0.6, stop=0.8, freq=20., ampl=10.)
     signal = noise + sine_early + sine_late
     ax[0].plot(times, signal, 'r')
-    trial_label = f'Trial {ix + 1}'
-    ax[0].text(-0.02, max(signal) - 4, trial_label)
 
-    # Add to running sum for later averaging
-    signal_sum += signal
+    # Add trial label
+    trial_label = f'Trial {ix + 1}'
+    ax[0].text(-0.02, max(signal) - 5, trial_label)
 
     # Compute time-frequency decomposition and plot as image
-    signal = np.expand_dims(signal, axis=0)
-    signal = np.expand_dims(signal, axis=0)
-    tfr = tfr_array_morlet(signal, sampling_rate, freqs=morlet_freqs,
+    signal_mne = np.expand_dims(signal, axis=0)
+    signal_mne = np.expand_dims(signal_mne, axis=0)
+    tfr = tfr_array_morlet(signal_mne, sampling_rate, freqs=morlet_freqs,
                            n_cycles=morlet_cycles, output='power')
     tfr = np.squeeze(tfr)
     ax[1].imshow(
-      tfr, cmap='turbo', aspect='auto', vmin=-tfr.max(), vmax=tfr.max(),
-      origin='lower', extent=(0., 1., 6., 40.))
-    ax[1].text(0.02, 34., trial_label)
+        tfr, cmap='turbo', aspect='auto', vmin=-tfr.max(), vmax=tfr.max(),
+        origin='lower', extent=(0., 1., 6., 40.))
 
-    # Add to running sum for later averaging
+    # Add to running sums for later averaging
+    signal_sum += signal
     tfr_sum += tfr
 
 # Plot averaged timecourse
@@ -151,23 +156,25 @@ axs[-1, 0].text(-0.02, max(signal_avg) - 4, 'Average')
 
 # Plot averaged power
 tfr_avg = tfr_sum / n_trials
-_ = axs[-1, 1].imshow(
-  tfr_avg, cmap='turbo', aspect='auto', vmin=-tfr_avg.max(), vmax=tfr_avg.max(),
-  origin='lower', extent=(0., 1., 6., 40.))
-_ = axs[-1, 1].text(0.02, 34., 'Average')
+_ = axs[-1, 1].imshow(tfr_avg, cmap='turbo', aspect='auto',
+                      vmin=-tfr_avg.max(),
+                      vmax=tfr_avg.max(),
+                      origin='lower', extent=(0., 1., 6., 40.))
 
 # Column titles
 _ = axs[0, 0].set_title('Time domain', weight='bold')
 _ = axs[0, 1].set_title('Time-frequency domain', weight='bold')
 
-# Axis lables
-_ = fig.text(0.5, 0., 'Time (s)', ha='center')
-_ = fig.text(0., 0.5, 'Amplitude (µV)', va='center', rotation='vertical')
-_ = fig.text(0.5, 0.5, 'Frequency (Hz)', va='center', rotation='vertical')
+# x-axis lables
+_ = axs[-1, 0].set_xlabel('Time (s)')
+_ = axs[-1, 1].set_xlabel('Time (s)')
+
+# y-axis labels
+_ = axs[2, 0].set_ylabel('Amplitude (µV)')
+_ = axs[2, 1].set_ylabel('Frequency (Hz)')
 
 # Show figure
 _ = fig.tight_layout()
-_ = plt.subplots_adjust(hspace=0.3, wspace=0.2)
 _ = plt.show()
 ```
 
@@ -179,7 +186,7 @@ _ = plt.show()
 
 ## Sine waves
 
-```{python, sine}
+```{python}
 import matplotlib.patches as patches
 
 # Define sine wave
@@ -219,13 +226,13 @@ _ = plt.annotate('', xy=(0, 0), xytext=(tmax / freq, 0),
              arrowprops=dict(arrowstyle='<->'))
 
 # Annotate phase
-_ = plt.annotate('Where?\nPhase (°)', xy=(0, 0.5), xytext=(0, ampl - 0.5),
-             ha = "center", va='center', arrowprops=dict(arrowstyle='->'))
+_ = plt.annotate('Where?\nPhase\n(°)', xy=(0, 0.5), xytext=(0, ampl),
+             ha='center', va='top', arrowprops=dict(arrowstyle='->'))
 ```
 
 ## Sine waves
 
-```{python, sines, out.width="100%"}
+```{python, out.width="100%"}
 # Plot new sine waves
 smaller_ampl = 2.5
 x_smaller_ampl = smaller_ampl * np.sin(2 * np.pi * freq * times)
@@ -286,45 +293,42 @@ f(t) &= A_0 + A_1 \cos(\omega t + \varphi_1) + A_2 \cos(\omega t + \varphi_2) + 
 
 ## Fourier transform
 
-```{python, fourier}
+```{python}
+from scipy.signal import periodogram
+
 # Define frequencies of interest and their amplitudes
 freqs = [2., 10., 25.]
 ampls = [5., 4., 2.]
 
 # Create figure
 fig, all_axs = plt.subplots(len(freqs) + 1, 2, figsize=(9, 6), sharey='col')
-x_sum = np.zeros_like(times)
+signal_sum = np.zeros_like(times)
 for row_ix, (freq, ampl, axs) in enumerate(zip(freqs, ampls, all_axs)):
 
     # Create a single sine wave
-    x = ampl * np.sin(2 * np.pi * freq * times)
-    _ = axs[0].plot(times, x, 'r')
+    signal = ampl * np.sin(2 * np.pi * freq * times)
+    _ = axs[0].plot(times, signal, 'r')
 
     # Annotate
-    label = f'$F = {int(freq)}$ Hz, $A = {int(ampl)}$ µV'
+    label = f'$\omega = {int(freq)}$ Hz, $A = {int(ampl)}$ µV'
     _ = axs[0].text(-0.02, 8., label)
 
     # Compute spectrum
-    X = np.fft.fft(x)
-    n = np.arange(len(X))
-    freq = n / tmax
-    _ = axs[1].stem(freq, np.abs(X), linefmt='b', markerfmt=" ", basefmt="-b")
-    _ = axs[1].set_xlim(0, max(freqs) + 5)
+    freqs, spect = periodogram(signal, sampling_rate, scaling='spectrum')
+    _ = axs[1].plot(freqs, spect, 'b')
+    _ = axs[1].set_xlim(0., 30.)
 
     # Add sine wave to the combined signal
-    x_sum += x
+    signal_sum += signal
 
 # Plot combined signal
-_ = all_axs[-1, 0].plot(times, x_sum, 'r')
+_ = all_axs[-1, 0].plot(times, signal_sum, 'r')
 _ = all_axs[-1, 0].text(-0.02, 8., 'Sum')
 
 # Plot spectrum of the combined signal
-X = np.fft.fft(x_sum)
-n = np.arange(len(X))
-freq = n / tmax
-_ = all_axs[-1, 1].stem(
-  freq, np.abs(X), linefmt='b', markerfmt=" ", basefmt="-b")
-_ = all_axs[-1, 1].set_xlim(0, max(freqs) + 5)
+freqs, spect = periodogram(signal_sum, sampling_rate, scaling='spectrum')
+_ = all_axs[-1, 1].plot(freqs, spect, 'b')
+_ = all_axs[-1, 1].set_xlim(0., 30.)
 
 # Column titles
 _ = all_axs[0, 0].set_title('Time domain', weight='bold')
@@ -334,8 +338,363 @@ _ = all_axs[0, 1].set_title('Frequency domain', weight='bold')
 _ = all_axs[-1, 0].set_xlabel('Time (s)')
 _ = all_axs[-1, 1].set_xlabel('Frequency (Hz)')
 _ = fig.text(0, 0.5, 'Amplitude (µV)', va='center', rotation='vertical')
+_ = fig.text(0.5, 0.5, 'Power (µV²)', va='center', rotation='vertical')
+
+# Show figure
+_ = plt.subplots_adjust(wspace=3.)
+_ = fig.tight_layout()
+_ = plt.show()
+```
+
+## Frequency analysis in MNE
+
+```{python}
+from mne import set_log_level
+
+set_log_level('ERROR')
+```
+
+```{python, echo=TRUE, out.width="80%"}
+# Read raw data and downsample
+from mne.io import read_raw_brainvision
+raw = read_raw_brainvision('data/raw/05.vhdr')
+raw = raw.resample(125.)
+
+# Spectrum for a single channel
+_ = raw.plot_psd(picks='Cz', color='b', spatial_colors=False)
+```
+
+```{python}
+plt.show()
+```
+
+## Frequency analysis in MNE
+
+```{python, echo=TRUE, out.width="80%"}
+# Spectrum for all channels, restricted to 0--30 Hz
+_ = raw.plot_psd(fmax=30, color='b', spatial_colors=False)
+```
+
+```{python}
+plt.show()
+```
+
+## Frequency analysis
+
+```{python, out.width="90%", results=FALSE}
+# Prepare empty matrices
+signal_sum = np.zeros_like(times)
+spect_sum = np.zeros((int(len(times) / 2 + 1),))
+tfr_sum = np.zeros((len(morlet_freqs), len(times)))
+
+# Prepare plot
+n_trials = 4
+fig, axs = plt.subplots(nrows=n_trials + 1, ncols=3, figsize=(9, 6))
+for ix, ax in zip(range(n_trials), axs):
+
+    # Create signal and plot as a timecourse
+    noise = np.random.normal(0, 1, size=times.shape)
+    sine_early = make_windowed_sine(
+        times, start=0.2, stop=0.4, freq=10., ampl=10., phase=0.25 * ix)
+    sine_late = make_windowed_sine(
+        times, start=0.6, stop=0.8, freq=20., ampl=10.)
+    signal = noise + sine_early + sine_late
+    ax[0].plot(times, signal, 'r')
+
+    # Add trial label
+    trial_label = f'Trial {ix + 1}'
+    ax[0].text(-0.02, max(signal) - 5, trial_label)
+
+    # Compute Fourier transform and plot as a spectrum
+    freqs, spect = periodogram(signal, sampling_rate, scaling='spectrum')
+    _ = ax[1].plot(freqs, spect, 'b')
+    _ = ax[1].set_xlim(0., 30.)
+
+    # Compute time-frequency decomposition and plot as image
+    signal_mne = np.expand_dims(signal, axis=0)
+    signal_mne = np.expand_dims(signal_mne, axis=0)
+    tfr = tfr_array_morlet(signal_mne, sampling_rate, freqs=morlet_freqs,
+                           n_cycles=morlet_cycles, output='power')
+    tfr = np.squeeze(tfr)
+    ax[2].imshow(
+        tfr, cmap='turbo', aspect='auto', vmin=-tfr.max(), vmax=tfr.max(),
+        origin='lower', extent=(0., 1., 6., 40.))
+
+    # Add to running sums for later averaging
+    signal_sum += signal
+    spect_sum += spect
+    tfr_sum += tfr
+
+# Plot averaged timecourse
+signal_avg = signal_sum / n_trials
+axs[-1, 0].plot(times, signal_avg, 'r')
+axs[-1, 0].text(-0.02, max(signal_avg) - 4, 'Average')
+
+# Plot averaged spectrum
+spect_avg = spect_sum / n_trials
+axs[-1, 1].plot(freqs, spect_avg, 'b')
+axs[-1, 1].set_xlim(0., 30.)
+
+# Plot averaged power
+tfr_avg = tfr_sum / n_trials
+_ = axs[-1, 2].imshow(tfr_avg, cmap='turbo', aspect='auto',
+                      vmin=-tfr_avg.max(),
+                      vmax=tfr_avg.max(),
+                      origin='lower', extent=(0., 1., 6., 40.))
+
+# Column titles
+_ = axs[0, 0].set_title('Time domain', weight='bold')
+_ = axs[0, 1].set_title('Frequency domain', weight='bold')
+_ = axs[0, 2].set_title('Time-frequency domain', weight='bold')
+
+# x-axis lables
+_ = axs[-1, 0].set_xlabel('Time (s)')
+_ = axs[-1, 1].set_xlabel('Frequency (Hz)')
+_ = axs[-1, 2].set_xlabel('Time (s)')
+
+# y-axis labels
+_ = axs[2, 0].set_ylabel('Amplitude (µV)')
+_ = axs[2, 1].set_ylabel('Power (µV²)')
+_ = axs[2, 2].set_ylabel('Frequency (Hz)')
 
 # Show figure
 _ = fig.tight_layout()
 _ = plt.show()
 ```
+
+## Time-frequency analysis
+
+**Goal:** Estimate how power (or phase) at each frequency changes over time, e.g., in response to a stimulus
+
+**Approach:** Apply the Fourier transform to a short time window and move this over time points in the epoch $\rightarrow$ Short-term Fourier transform (STFT), Morlet wavelet convolution
+
+## Morlet wavelets
+
+```{python, out.width="90%", results=FALSE}
+from mne import events_from_annotations, Epochs
+from mne.time_frequency import morlet, tfr_morlet
+
+# Define wavelets
+freqs = np.arange(6., 30., step=2.)
+n_cycles = np.arange(3., 15., step=1.)
+
+# Compute ERP example
+events, _ = events_from_annotations(raw, regexp='Stimulus')
+triggers = [201, 205]
+epochs = Epochs(raw, events, triggers, tmin=-0.5, tmax=1.5, baseline=(-0.2, 0.))
+ave = epochs.copy().load_data().pick_channels(['Cz']).average().data.squeeze()
+
+# Compute TFR example
+tfr = tfr_morlet(epochs, freqs, n_cycles, return_itc=False, average=False)
+tfr = tfr.apply_baseline((-0.3, -0.1), mode='percent')
+tfr_ave = tfr.average().copy().pick_channels(['Cz']).data.squeeze()
+
+# Prepare multi-panel figure
+fig = plt.figure(figsize=(10, 7))
+widths = [10, 1, 10, 1, 10]
+gs = fig.add_gridspec(len(freqs), 5, width_ratios=widths)
+
+# Plot wavelets
+wavelet_params = zip(reversed(freqs), reversed(n_cycles))
+for ix, (freq, this_n_cycles) in enumerate(wavelet_params):
+    wavelet = morlet(sampling_rate, [freq], [this_n_cycles])[0]
+    sigma_t = this_n_cycles / (2.0 * np.pi * freq)
+    times_wavelet = np.arange(0., 5. * sigma_t, 1.0 / sampling_rate)
+    times_wavelet = np.r_[-times_wavelet[::-1], times_wavelet[1:]]
+    _ = ax = fig.add_subplot(gs[ix, 0])
+    _ = ax.plot(times_wavelet, wavelet, "r")
+    if ix == 0:
+        _ = ax.set_title('Wavelets', weight='bold')
+    if ix == len(freqs) - 1:
+        _ = ax.set_xlabel('Time (s)')
+_ = fig.text(0.06, 0.5, 'Amplitude (µV)', va='center', rotation='vertical')
+
+# Add convolution symbol
+ax = fig.add_subplot(gs[:, 1])
+_ = ax.text(-1., 0.47, '$*$')
+_ = plt.axis('off')
+
+# Plot ERP time course
+ax = fig.add_subplot(gs[5:7, 2])
+_ = ax.plot(epochs.times, ave * 1e6, 'r')
+_ = ax.set_title('EEG timecourse', weight='bold')
+_ = ax.set_xlabel('Time (s)')
+_ = ax.set_ylabel('Amplitude (µV)')
+
+# Add equals symbol
+ax = fig.add_subplot(gs[:, 3])
+_ = ax.text(-1., 0.47, '$=$')
+_ = plt.axis('off')
+
+# Plot time-frequency image
+ax = fig.add_subplot(gs[5:7, 4])
+im = ax.imshow(
+    tfr_ave, cmap='turbo', aspect='auto', vmin=-tfr_ave.max(),
+    vmax=tfr_ave.max(), origin='lower',
+    extent=(min(epochs.times), max(epochs.times), min(freqs), max(freqs)))
+_ = ax.set_title('Time-frequency plot', weight='bold')
+_ = plt.colorbar(im, label='Power (µV²)')
+_ = ax.set_xlabel('Time (s)')
+_ = ax.set_ylabel('Frequency (Hz)')
+
+# Show figure
+_ = plt.tight_layout()
+_ = plt.subplots_adjust(hspace=0., wspace=0.3)
+_ = plt.show()
+# %%
+
+```
+
+## Basline correction
+
+- Should account for the $\frac{1}{F}$ scaling $\rightarrow$ Divisive baseline
+
+    - Subtract + divide by mean baseline: Percent signal change
+
+    - Divide by mean baseline + take logarithm: Decibel
+
+- Baseline should end *before* rather tha *at* stimulus onset
+
+    - Prevents low-freq activity to "smear" into the baseline
+
+## Time-frequency analysis in MNE-Python
+
+```{python, echo=TRUE}
+# Load functions
+import numpy as np
+from mne import events_from_annotations, Epochs
+from mne.time_frequency import tfr_morlet
+
+# Segmentation to epochs
+events, _ = events_from_annotations(raw, regexp='Stimulus')
+triggers = [201, 205]
+epochs = Epochs(raw, events, triggers, tmin=-0.5, tmax=1.5, baseline=(-0.2, 0.))
+print(epochs.get_data().shape)
+```
+
+```{python, echo=TRUE}
+# Morlet wavelet decomposition
+freqs = np.arange(6., 30., step=2.)
+n_cycles = np.arange(3., 15., step=1.)
+tfr = tfr_morlet(epochs, freqs, n_cycles, return_itc=False, average=False)
+print(tfr.data.shape)
+```
+
+## Time-frequency analysis in MNE-Python
+
+```{python, echo=TRUE, results=FALSE}
+# Divisive baseline correction to get percent signal change
+tfr = tfr.apply_baseline((-0.3, -0.1), mode='percent')
+
+# Plot power at one channel, averaged across all epochs
+tfr_ave = tfr.average()
+tfr_ave.plot(picks='Cz', cmap='turbo')
+```
+
+```{python, out.width="60%"}
+_ = plt.show()
+```
+
+## Time-frequency analysis in MNE-Python
+
+```{python, echo=TRUE, results=FALSE}
+# Compute power per condition and the difference between conditions
+tfr_aves = {'Blurred': tfr['201'].average(),
+            'Normal': tfr['205'].average(),
+            'Difference': tfr['201'].average() - tfr['205'].average()}
+
+# Create multi-panel plot
+import matplotlib.pyplot as plt
+fig, axs = plt.subplots(nrows=1, ncols=len(tfr_aves), figsize=(9, 2))
+for ix, (label, tfr_ave) in enumerate(tfr_aves.items()):
+    axs[ix].set_title(label, weight='bold')
+    tfr_ave.plot(picks='Cz', cmap='turbo', vmin=-15, vmax=15,
+                 axes=axs[ix], show=False)
+```
+
+```{python, out.width="95%"}
+_ = plt.tight_layout()
+_ = plt.show()
+```
+
+## Time-frequency analysis with the pipeline
+
+General settings:
+
+```{r, echo=TRUE, eval=FALSE}
+# Import the Python package from R
+pipeline <- reticulate::import("pipeline")
+
+# Run the pipeline
+res <- pipeline$group_pipeline(
+  vhdr_files = "data/raw",
+  log_files = "data/log",
+  output_dir = "output",
+  ocular_correction = "data/cali",
+  triggers = c(201:208, 211:218),
+  average_by = c("n_b", "DeviantPosRL", "n_b/DeviantPosRL"),
+  perform_tfr = TRUE,
+  tfr_freqs = seq(6, 30, 2),
+  tfr_cycles = seq(3, 15, 1),
+  tfr_baseline_tmin = -0.3,
+  tfr_baseline_tmax = -0.1,
+  ... # See next 2 slides
+)
+```
+
+## Time-frequency analysis with the pipeline
+
+For effects with *a priori* knowledge about their distribution:
+
+```{r}
+# Define time-frequency "components" of interest
+res <- pipeline$group_pipeline(
+  ...,
+  tfr_components = list(
+    "name":list("alpha"),
+    "tmin":list(0.0),
+    "tmax":list(0.2),
+    "fmin":list(8.),
+    "fmax":list(14.),
+    "roi":list(
+      c("PO9", "PO7", "PO3", "POz", "PO4", "PO8", "PO10", "O1", "Oz", "O2")
+    )
+  )
+)
+```
+
+$\rightarrow$ Then perform linear mixed-effects model analysis on single trial power
+
+## Time-frequency analysis with the pipeline
+
+For exploratory analyses $\rightarrow$ Cluster-based permutation test
+
+```{r}
+# Run 3D cluster-based permutation tests for contrasts of interest
+res <- pipeline$group_pipeline(
+  ...,
+  perm_contrasts = list(
+    c("blurr", "normal"),
+    c("blurr/re", "blurr/li"),
+    c("normal/re", "normal/li")
+  )
+)
+```
+
+$\rightarrow$ Creates a new data frame with cluster-level $p$ values for all time samples, channels, and frequencies
+
+## General considerations
+
+- New parameters to be taken care of:
+
+    - Design $\rightarrow$ Longer inter-trial interval
+
+    - Wavelet frequencies + number of cycles $\rightarrow$ TF tradeoff
+
+    - Baseline correction window and method
+
+    - Interpretation: narrow-band vs. broad-band, oscillation vs. rate of change
+
+- Everything matters
+
+## Thanks
