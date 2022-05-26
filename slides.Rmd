@@ -354,6 +354,14 @@ from mne import set_log_level
 set_log_level('ERROR')
 ```
 
+```{python, eval=FALSE}
+# Download raw data
+from os import environ, getcwd
+from pipeline.datasets import ucap
+environ['PIPELINE_DATA_DIR'] = getcwd() + '/data'
+_ = ucap.get_paths(n_participants = 1)
+```
+
 ```{python, echo=TRUE, out.width="80%"}
 # Read raw data
 from mne.io import read_raw_brainvision
