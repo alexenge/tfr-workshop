@@ -341,12 +341,12 @@ _ = fig.text(0, 0.5, 'Amplitude (µV)', va='center', rotation='vertical')
 _ = fig.text(0.5, 0.5, 'Power (µV²)', va='center', rotation='vertical')
 
 # Show figure
-_ = plt.subplots_adjust(wspace=3.)
+_ = plt.subplots_adjust(wspace=3.5)
 _ = fig.tight_layout()
 _ = plt.show()
 ```
 
-## Frequency analysis in MNE
+## Frequency analysis in MNE-Python
 
 ```{python}
 from mne import set_log_level
@@ -355,12 +355,14 @@ set_log_level('ERROR')
 ```
 
 ```{python, echo=TRUE, out.width="80%"}
-# Read raw data and downsample
+# Read raw data
 from mne.io import read_raw_brainvision
 raw = read_raw_brainvision('data/raw/05.vhdr')
+
+# Downsample to make subsequent computations faster
 raw = raw.resample(125.)
 
-# Spectrum for a single channel
+# Plot spectrum for a single channel
 _ = raw.plot_psd(picks='Cz', color='b', spatial_colors=False)
 ```
 
@@ -368,10 +370,10 @@ _ = raw.plot_psd(picks='Cz', color='b', spatial_colors=False)
 plt.show()
 ```
 
-## Frequency analysis in MNE
+## Frequency analysis in MNE-Python
 
 ```{python, echo=TRUE, out.width="80%"}
-# Spectrum for all channels, restricted to 0--30 Hz
+# Plot spectrum for all channels, restricted to 0-30 Hz
 _ = raw.plot_psd(fmax=30, color='b', spatial_colors=False)
 ```
 
@@ -466,7 +468,7 @@ _ = plt.show()
 
 **Goal:** Estimate how power (or phase) at each frequency changes over time, e.g., in response to a stimulus
 
-**Approach:** Apply the Fourier transform to a short time window and move this over time points in the epoch $\rightarrow$ Short-term Fourier transform (STFT), Morlet wavelet convolution
+**Approach:** Apply the Fourier transform to a short time window and move this window over time points in the epoch $\rightarrow$ Short-term Fourier transform (STFT), Morlet wavelet convolution
 
 ## Morlet wavelets
 
@@ -533,7 +535,8 @@ im = ax.imshow(
     vmax=tfr_ave.max(), origin='lower',
     extent=(min(epochs.times), max(epochs.times), min(freqs), max(freqs)))
 _ = ax.set_title('Time-frequency plot', weight='bold')
-_ = plt.colorbar(im, label='Power (µV²)')
+cbar = plt.colorbar(im)
+_ = cbar.set_label('Power', rotation=-90)
 _ = ax.set_xlabel('Time (s)')
 _ = ax.set_ylabel('Frequency (Hz)')
 
@@ -547,15 +550,19 @@ _ = plt.show()
 
 ## Basline correction
 
-- Should account for the $\frac{1}{F}$ scaling $\rightarrow$ Divisive baseline
+- Should fit at least one full cycle at the lowest frequency
+
+    - E.g., 5 Hz $\rightarrow$ min. 200 ms baseline
+
+- Should account for the $1/f$ scaling $\rightarrow$ Divisive baseline
 
     - Subtract + divide by mean baseline: Percent signal change
 
     - Divide by mean baseline + take logarithm: Decibel
 
-- Baseline should end *before* rather tha *at* stimulus onset
+- Baseline should end *before* rather than *at* stimulus onset
 
-    - Prevents low-freq activity to "smear" into the baseline
+    - Prevents post-stimulus activity "smearing" into the baseline
 
 ## Time-frequency analysis in MNE-Python
 
@@ -565,19 +572,19 @@ import numpy as np
 from mne import events_from_annotations, Epochs
 from mne.time_frequency import tfr_morlet
 
-# Segmentation to epochs
+# Segment continuous signal to epochs
 events, _ = events_from_annotations(raw, regexp='Stimulus')
 triggers = [201, 205]
 epochs = Epochs(raw, events, triggers, tmin=-0.5, tmax=1.5, baseline=(-0.2, 0.))
-print(epochs.get_data().shape)
+print(epochs.get_data().shape) # Dimensions: (trials, channels, time points)
 ```
 
 ```{python, echo=TRUE}
-# Morlet wavelet decomposition
+# Apply Morlet wavelet decomposition
 freqs = np.arange(6., 30., step=2.)
 n_cycles = np.arange(3., 15., step=1.)
 tfr = tfr_morlet(epochs, freqs, n_cycles, return_itc=False, average=False)
-print(tfr.data.shape)
+print(tfr.data.shape) # Dimensions: (trials, channels, frequencies, time points)
 ```
 
 ## Time-frequency analysis in MNE-Python
@@ -586,7 +593,7 @@ print(tfr.data.shape)
 # Divisive baseline correction to get percent signal change
 tfr = tfr.apply_baseline((-0.3, -0.1), mode='percent')
 
-# Plot power at one channel, averaged across all epochs
+# Plot power at one channel, averaged across epochs
 tfr_ave = tfr.average()
 tfr_ave.plot(picks='Cz', cmap='turbo')
 ```
@@ -625,7 +632,7 @@ General settings:
 # Import the Python package from R
 pipeline <- reticulate::import("pipeline")
 
-# Run the pipeline
+# Run the pipeline with the `tfr` (time-frequency) options
 res <- pipeline$group_pipeline(
   vhdr_files = "data/raw",
   log_files = "data/log",
@@ -634,8 +641,8 @@ res <- pipeline$group_pipeline(
   triggers = c(201:208, 211:218),
   average_by = c("n_b", "DeviantPosRL", "n_b/DeviantPosRL"),
   perform_tfr = TRUE,
-  tfr_freqs = seq(6, 30, 2),
-  tfr_cycles = seq(3, 15, 1),
+  tfr_freqs = seq(6, 30, by = 2),
+  tfr_cycles = seq(3, 15, by = 1),
   tfr_baseline_tmin = -0.3,
   tfr_baseline_tmax = -0.1,
   ... # See next 2 slides
@@ -646,30 +653,30 @@ res <- pipeline$group_pipeline(
 
 For effects with *a priori* knowledge about their distribution:
 
-```{r}
+```{r, echo=TRUE, eval=FALSE}
 # Define time-frequency "components" of interest
 res <- pipeline$group_pipeline(
   ...,
   tfr_components = list(
-    "name":list("alpha"),
-    "tmin":list(0.0),
-    "tmax":list(0.2),
-    "fmin":list(8.),
-    "fmax":list(14.),
-    "roi":list(
+    "name" = list("alpha"),
+    "tmin" = list(0.0),
+    "tmax" = list(0.2),
+    "fmin" = list(8),
+    "fmax" = list(14),
+    "roi" = list(
       c("PO9", "PO7", "PO3", "POz", "PO4", "PO8", "PO10", "O1", "Oz", "O2")
     )
   )
 )
 ```
 
-$\rightarrow$ Then perform linear mixed-effects model analysis on single trial power
+$\rightarrow$ Then use the single trial data frame to run mixed models
 
 ## Time-frequency analysis with the pipeline
 
-For exploratory analyses $\rightarrow$ Cluster-based permutation test
+For exploratory analyses $\rightarrow$ Cluster-based permutation tests:
 
-```{r}
+```{r, echo=TRUE, eval=FALSE}
 # Run 3D cluster-based permutation tests for contrasts of interest
 res <- pipeline$group_pipeline(
   ...,
@@ -681,19 +688,25 @@ res <- pipeline$group_pipeline(
 )
 ```
 
-$\rightarrow$ Creates a new data frame with cluster-level $p$ values for all time samples, channels, and frequencies
+$\rightarrow$ Creates a new data frame with cluster-level $p$-values across time, space (channels), and frequencies
 
-## General considerations
+## General remarks
 
-- New parameters to be taken care of:
+- Richer view of the EEG signal (evoked + induced activity)
 
-    - Design $\rightarrow$ Longer inter-trial interval
+- Many new parameters to think carefully about:
 
-    - Wavelet frequencies + number of cycles $\rightarrow$ TF tradeoff
+    - Design $\rightarrow$ Longer inter-trial interval; jittering
+
+    - Wavelet frequencies + number of cycles $\rightarrow$ T/f tradeoff
 
     - Baseline correction window and method
 
-    - Interpretation: narrow-band vs. broad-band, oscillation vs. rate of change
+    - Interpretation:
+        
+        - Narrow-band vs. broad-band
+        
+        - Oscillation vs. rate of change
 
 - Everything matters
 
