@@ -5,6 +5,7 @@ date:           "25/05/2022"
 institute:      "Neuro Lab @ Humboldt-Universität zu Berlin"
 classoption:    "t"
 bibliography:   "template/references.bib"
+nocite:         "@berger1929, @keil2022, @roach2008"
 csl:            "template/apa.csl"
 output:
   beamer_presentation:
@@ -496,7 +497,8 @@ ave = epochs.copy().load_data().pick_channels(['Cz']).average().data.squeeze()
 
 # Compute TFR example
 tfr = tfr_morlet(epochs, freqs, n_cycles, return_itc=False, average=False)
-tfr = tfr.apply_baseline((-0.3, -0.1), mode='percent')
+tfr = tfr.apply_baseline((None, None), mode='percent')
+tfr = tfr.apply_baseline((-0.45, -0.05), mode='mean')
 tfr_ave = tfr.average().copy().pick_channels(['Cz']).data.squeeze()
 
 # Prepare multi-panel figure
@@ -552,11 +554,9 @@ _ = ax.set_ylabel('Frequency (Hz)')
 _ = plt.tight_layout()
 _ = plt.subplots_adjust(hspace=0., wspace=0.3)
 _ = plt.show()
-# %%
-
 ```
 
-## Basline correction
+## Baseline correction
 
 - Should fit at least one full cycle at the lowest frequency
 
@@ -571,6 +571,18 @@ _ = plt.show()
 - Baseline should end *before* rather than *at* stimulus onset
 
     - Prevents post-stimulus activity "smearing" into the baseline
+
+## Baseline correction - UPDATE
+
+**Problem:** Divisive single-trial pre-stimulus baseline correction creates positive bias in single-trial post-stimulus power [@grandchamp2011; @hu2014]
+
+**Solution:**
+
+- Apply a first, *divisive* baseline using the *entire epoch* as the baseline window
+
+- Then apply a second, *subtractive* baseline using the *pre-stimulus interval only*
+
+- Now implemented in the hu-neuro-pipeline, with options for the divisive baseline method (`tfr_baseline_mode`, e.g., percent, ratio, $z$-score) and for the subtractive baseline window (`tfr_baseline_tmin`, `tfr_baseline_tmax`)
 
 ## Time-frequency analysis in MNE-Python
 
@@ -599,7 +611,10 @@ print(tfr.data.shape) # Dimensions: (trials, channels, frequencies, time points)
 
 ```{python, echo=TRUE, results=FALSE}
 # Divisive baseline correction to get percent signal change
-tfr = tfr.apply_baseline((-0.3, -0.1), mode='percent')
+tfr = tfr.apply_baseline((None, None), mode='percent')
+
+# Subtractive baseline correction using the pre-stimulus interval only
+tfr = tfr.apply_baseline((-0.45, -0.05), mode='mean')
 
 # Plot power at one channel, averaged across epochs
 tfr_ave = tfr.average()
@@ -623,7 +638,7 @@ import matplotlib.pyplot as plt
 fig, axs = plt.subplots(nrows=1, ncols=len(tfr_aves), figsize=(9, 2))
 for ix, (label, tfr_ave) in enumerate(tfr_aves.items()):
     axs[ix].set_title(label, weight='bold')
-    tfr_ave.plot(picks='Cz', cmap='turbo', vmin=-15, vmax=15,
+    tfr_ave.plot(picks='Cz', cmap='turbo', vmin=-0.7, vmax=0.7,
                  axes=axs[ix], show=False)
 ```
 
@@ -651,8 +666,9 @@ res <- pipeline$group_pipeline(
   perform_tfr = TRUE,
   tfr_freqs = seq(6, 30, by = 2),
   tfr_cycles = seq(3, 15, by = 1),
-  tfr_baseline_tmin = -0.3,
-  tfr_baseline_tmax = -0.1,
+  tfr_baseline_tmin = -0.45,
+  tfr_baseline_tmax = -0.05,
+  tfr_baseline_mode = "percent",
   ... # See next 2 slides
 )
 ```
@@ -719,3 +735,7 @@ $\rightarrow$ Creates a new data frame with cluster-level $p$-values across time
 - Everything matters
 
 ## Thanks
+
+## References
+
+\scriptsize
